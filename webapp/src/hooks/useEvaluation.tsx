@@ -10,7 +10,7 @@ export const useEvaluation = (position: string) => {
   return useQuery({
     queryKey: ["evaluate", position],
     queryFn: async () => {
-      const response = await axios.get<Number>(
+      const response = await axios.get<number>(
         `http://127.0.0.1:8000/eval`,
         {
           params: { position },

@@ -1,19 +1,58 @@
 import { useEffect, useState } from "react";
 import { Chess } from "chess.js";
 import { Chessboard } from "react-chessboard";
-import { useEvaluation } from "./hooks/useEvaluatePosition";
+import { Flex, Paper, Text } from "@mantine/core";
+import axios from "axios";
+import ChessArrow from "./ChessArrow";
+import stylesheet from './ChessGame.module.css';
+
+interface Dictionary {
+  [key: string]: string;
+}
 
 export default function ChessGame() {
   const [game, setGame] = useState<Chess>(new Chess()); // Chess.js instance
   const [fen, setFen] = useState<string>(game.fen()); // Current FEN position
 
   // Use the evaluation hook with the current FEN position
-  const { data: evaluation, error, isLoading } = useEvaluation(fen);
+
+  const [loading, setLoading] = useState<boolean>(false);
+
+  const turnNotation: Dictionary = {
+    b: "black",
+    w: "white"
+  };
+
+  const fetchMove = async (position: string) => {
+    try {
+      setLoading(true);
+      const response = await axios.get("http://localhost:8000/move", {
+        params: { position }
+      });
+      const bestMove = response.data;
+      console.log("Best move:", bestMove);
+      return bestMove;
+    } catch (error) {
+      console.error("Error fetching move:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    // Debugging: Log evaluation data whenever it changes
-    console.log(evaluation, error, isLoading);
-  }, [evaluation, error, isLoading]);
+    if (game.turn() === "b" && !loading && !game.game_over() && !game.in_draw() && game.moves().length !== 0) { //game.turn() === "b" && !loading
+      const getMove = async () => {
+        const move = await fetchMove(game.fen());
+        if (move) {
+            safeGameMutate((gameInstance) => {
+                gameInstance.move(move);
+            });
+        }
+      };
+      getMove();
+    }
+  }, [fen]);
+
 
   function safeGameMutate(modify: (gameInstance: Chess) => void) {
     setGame((currentGame: Chess) => {
@@ -25,21 +64,6 @@ export default function ChessGame() {
       setFen(newFen); // Trigger evaluation for the new position
 
       return updatedGame;
-    });
-  }
-
-  function makeRandomMove() {
-    safeGameMutate((gameInstance) => {
-      const possibleMoves = gameInstance.moves();
-      if (
-        gameInstance.game_over() ||
-        gameInstance.in_draw() ||
-        possibleMoves.length === 0
-      ) {
-        return; // Exit if the game is over
-      }
-      const randomIndex = Math.floor(Math.random() * possibleMoves.length);
-      gameInstance.move(possibleMoves[randomIndex]);
     });
   }
 
@@ -55,20 +79,27 @@ export default function ChessGame() {
     });
 
     if (!moveMade) return false; // Illegal move
-    setTimeout(makeRandomMove, 200); // Make a random move after a short delay
     return true; // Move was successful
   }
 
   return (
-    <div>
-      <Chessboard
-        position={game.fen()} // Use the game's FEN for the board
-        onPieceDrop={onDrop}
-        boardWidth={400} // Adjust board size
-      />
-      {isLoading && <p>Loading evaluation...</p>}
-      {error && <p>Error: {error.message}</p>}
-      {evaluation !== undefined && <p>Evaluation: {evaluation}</p>}
-    </div>
+    <Flex
+    justify="center"
+    align="center"
+    style={{ width: '100vw', height: '100vh' }} // Full viewport height
+  >
+      <Paper shadow="md" p="xl" className={stylesheet.paper} >
+        <Flex justify="space-between" align="center" style={{ width: '100%' }}>
+          <Text>Status: {game.game_over() ? "over" : "ongoing"}</Text>
+          <Text>{game.game_over() ? "Loser:" : "Turn:"} {turnNotation[game.turn()]}</Text>
+        </Flex>
+        <Chessboard
+          position={game.fen()} // Use the game's FEN for the board
+          onPieceDrop={onDrop}
+          boardWidth={400} // Adjust board size
+        />
+        <ChessArrow fen={fen}/>
+      </Paper>
+    </Flex>
   );
 }
