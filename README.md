@@ -1,12 +1,39 @@
 # Blunder Buster
 
-Blunder buster is a deep neural network that uses convolution layers as well as FCL
+Blunder Buster is a human like chess robot. It uses the min-max-algorithm combined with a DNN to calculate what moves to do when. 
 
-# FEN-position to input
+The webapp itself also uses the same DNN to evaluate the current position and show what side it thinks is winning.
+
+|![In game](images/ingame.png)|
+|:---:|
+| A screenshot taken from a game. The robot is black |
+
+# How to run
+
+### Run backend
+
+First you need to install Keras, Tensorflow, chess, and FastAPI. Then run:
+```shell
+fastapi dev api_point.py
+```
+
+### Run frontend
+
+After running the frontend, run:
+```shell
+cd webapp
+npm i
+npm run dev
+```
+
+
+# Making the DNN-evaluator
+
+## FEN-position to input
 
 To make it easier for the DNN to learn from the positions, they have to be formatted. 
 
-A normal notation for chess-position is the Forsyth-Edwards Notation (FEN). An example of such a FEN-string is
+The standard notation for chess-position is the Forsyth-Edwards Notation (FEN). An example of such a FEN-string is
 
 - r3kb1r/ppp3pp/2bp1q2/4p3/3P4/5N2/PPP2PPP/R1BQR1K1 b kq - 0 10
 
@@ -29,3 +56,12 @@ If there is no piece in the square the array is a zero-array.
 ### Formatting turn and castling info
 
 The turn and castling information are all formatted into one array of size 5. The first item in the array represents whos turn it is. The other 4 items represent whether white can castle (right and left), and if black can castle (right and left). E.g. if its whites turn and both sides have all their castling opportunities then the array will be [1, 1, 1, 1, 1]
+
+## The network itself
+
+The piece-placement itslef is fed into a deep convolution network, while the metadata is fed into a Fully-Connected-Network (FCN). Then the outputs of the convolution network and the FCN are combined and fed into the same Fully-Connected-Deep Network. The network has 1 output; which is the prediction for the evaluation of the position.
+
+## Training the network
+
+TODO
+
