@@ -82,82 +82,88 @@ def eval(position):
 async def evaluate(position: str):
     return eval(position)
 
-def min_node(position, depth_left):
+def min_node(position, depth_left, branch_factor):
     board = chess.Board(position)
     legal_moves = board.legal_moves
 
-    best_evals = []
+    positions = []
+    metadatas = []
+    move_datas = []
 
     for move in legal_moves:
         board = chess.Board(position)
         san_move = board.san(move)
         board.push_san(san_move)
 
-        current_eval = eval(board.fen())
+        current_pos, current_meta = extractInfoFromFen(board.fen())
 
-        if len(best_evals) < 3:
-            best_evals.append((san_move, current_eval, board.fen()))
-        else:
-            # Find worst in eval
-            index_of_largest = max(enumerate(best_evals), key=lambda x: x[1][1])[0]
+        positions.append(current_pos)
+        metadatas.append(current_meta)
+        move_datas.append((san_move, board.fen()))
 
-            # If worst worse than current, replace it
-            if best_evals[index_of_largest][1] > current_eval:
-                best_evals[index_of_largest] = (san_move, current_eval, board.fen())
+    if len(positions) == 0:
+        return (0, 0, 500)
 
-    if len(best_evals) == 0:
-        return (0, 500)
+    predictions = np.ravel(model.predict({'board_input': np.array(positions), 'metadata_input': np.array(metadatas)}))
     
     if (depth_left == 0):
-        index_of_smallest = min(enumerate(best_evals), key=lambda x: x[1][1])[0]
-        return best_evals[index_of_smallest]
+        min_index = np.argmin(predictions)
+        return (move_datas[min_index][0], move_datas[min_index][1], predictions[min_index])
+
+    min_index = np.argmin(predictions)
+    bottom_indexes = np.argsort(predictions)[:branch_factor]
+
+    index = bottom_indexes[0]
+    better_estimate = max_node(move_datas[index][1], depth_left - 1, branch_factor - 1)[2]
+
+    best_option = (move_datas[index][0], move_datas[index][1], better_estimate)
+    for index in bottom_indexes[1:]:
+        better_estimate = max_node(move_datas[index][1], depth_left - 1, branch_factor - 1)[2]
+        if better_estimate < best_option[2]:
+            best_option = (move_datas[index][0], move_datas[index][1], better_estimate)
     
-    for i in range(len(best_evals)):
-        better_estimate = max_node(best_evals[i][2], depth_left - 1)[1]
-        print(better_estimate)
-        best_evals[i] = (best_evals[i][0], better_estimate, best_evals[i][2])
-
-    index_of_smallest = min(enumerate(best_evals), key=lambda x: x[1][1])[0]
-
-    print("chose", best_evals[index_of_smallest][1])
-
-    return best_evals[index_of_smallest]
+    return best_option
 
 
-def max_node(position, depth_left):
+def max_node(position, depth_left, branch_factor):
     board = chess.Board(position)
     legal_moves = board.legal_moves
 
-    best_evals = []
+    positions = []
+    metadatas = []
+    move_datas = []
 
     for move in legal_moves:
         board = chess.Board(position)
         san_move = board.san(move)
         board.push_san(san_move)
 
-        current_eval = eval(board.fen())
+        current_pos, current_meta = extractInfoFromFen(board.fen())
 
-        if len(best_evals) < 3:
-            best_evals.append((san_move, current_eval, board.fen()))
-        else:
-            index_of_smallest = min(enumerate(best_evals), key=lambda x: x[1][1])[0]
+        positions.append(current_pos)
+        metadatas.append(current_meta)
+        move_datas.append((san_move, board.fen()))
 
-            if best_evals[index_of_smallest][1] < current_eval:
-                best_evals[index_of_smallest] = (san_move, current_eval, board.fen())
+    if len(positions) == 0:
+        return (0, 0, -500)
 
-    if len(best_evals) == 0:
-        return (0, -500)
+    predictions = np.ravel(model.predict({'board_input': np.array(positions), 'metadata_input': np.array(metadatas)}))
     
     if (depth_left == 0):
-        index_of_largest = max(enumerate(best_evals), key=lambda x: x[1][1])[0]
-        return best_evals[index_of_largest]
-    
-    for i in range(len(best_evals)):
-        better_estimate = min_node(best_evals[i][2], depth_left - 1)[1]
-        best_evals[i] = (best_evals[i][0], better_estimate, best_evals[i][2])
+        max_index = np.argmax(predictions)
+        return (move_datas[max_index][0], move_datas[max_index][1], predictions[max_index])
 
-    index_of_largest = max(enumerate(best_evals), key=lambda x: x[1][1])[0]
-    return best_evals[index_of_largest]
+    top_indexes = np.argsort(predictions)[-branch_factor:][::-1]
+
+    index = top_indexes[0]
+    better_estimate = min_node(move_datas[index][1], depth_left - 1, branch_factor - 1)[2]
+    best_option = (move_datas[index][0], move_datas[index][1], better_estimate)
+    for index in top_indexes[1:]:
+        better_estimate = min_node(move_datas[index][1], depth_left - 1, branch_factor - 1)[2]
+        if better_estimate > best_option[2]:
+            best_option = (move_datas[index][0], move_datas[index][1], better_estimate)
+
+    return best_option
 
 @app.get("/move")
 async def makeMove(position: str):
@@ -166,7 +172,7 @@ async def makeMove(position: str):
     print("\n".join(position.split("/")))
 
     if (side == "b"):
-        return min_node(position, 1)[0]
+        return min_node(position, 3, 5)[0]
     else:
-        return max_node(position, 1)[0]
+        return max_node(position, 3, 5)[0]
 
